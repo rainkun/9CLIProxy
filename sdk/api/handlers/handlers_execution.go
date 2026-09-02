@@ -41,6 +41,22 @@ func (h *BaseAPIHandler) executeWithAuthManager(ctx context.Context, handlerType
 }
 
 func (h *BaseAPIHandler) executeWithAuthManagerFormats(ctx context.Context, entryProtocol, exitProtocol, modelName string, rawJSON []byte, alt string, allowImageModel bool, execOptions modelExecutionOptions) ([]byte, http.Header, *interfaces.ErrorMessage) {
+	if combo, ok := h.comboForModel(modelName); ok && !comboExecutionActive(ctx) {
+		var lastErr *interfaces.ErrorMessage
+		for _, member := range comboMemberOrder(combo) {
+			body, headers, errMsg := h.executeWithAuthManagerFormats(comboExecutionContext(ctx), entryProtocol, exitProtocol, member, rewriteComboRequestModel(rawJSON, member), alt, allowImageModel, execOptions)
+			if errMsg == nil {
+				return rewriteComboResponseModel(body, combo.Name), headers, nil
+			}
+			lastErr = errMsg
+			if !comboFallbackEligible(errMsg) {
+				break
+			}
+		}
+		if lastErr != nil {
+			return nil, nil, lastErr
+		}
+	}
 	originalRequestedModel := modelName
 	routeDecision := h.applyModelRouter(ctx, entryProtocol, modelName, rawJSON, false, execOptions)
 	responseProtocol := modelExecutionResponseProtocol(entryProtocol, exitProtocol)
@@ -111,6 +127,22 @@ func (h *BaseAPIHandler) ExecuteCountWithAuthManager(ctx context.Context, handle
 }
 
 func (h *BaseAPIHandler) executeCountWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string, execOptions modelExecutionOptions) ([]byte, http.Header, *interfaces.ErrorMessage) {
+	if combo, ok := h.comboForModel(modelName); ok && !comboExecutionActive(ctx) {
+		var lastErr *interfaces.ErrorMessage
+		for _, member := range comboMemberOrder(combo) {
+			body, headers, errMsg := h.executeCountWithAuthManager(comboExecutionContext(ctx), handlerType, member, rewriteComboRequestModel(rawJSON, member), alt, execOptions)
+			if errMsg == nil {
+				return rewriteComboResponseModel(body, combo.Name), headers, nil
+			}
+			lastErr = errMsg
+			if !comboFallbackEligible(errMsg) {
+				break
+			}
+		}
+		if lastErr != nil {
+			return nil, nil, lastErr
+		}
+	}
 	originalRequestedModel := modelName
 	routeDecision := h.applyModelRouter(ctx, handlerType, modelName, rawJSON, false, execOptions)
 	if routeDecision.ExecutorPluginID != "" {

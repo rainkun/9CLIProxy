@@ -61,6 +61,11 @@ type SDKConfig struct {
 	// NonStreamKeepAliveInterval controls how often blank lines are emitted for non-streaming responses.
 	// <= 0 disables keep-alives. Value is in seconds.
 	NonStreamKeepAliveInterval int `yaml:"nonstream-keepalive-interval,omitempty" json:"nonstream-keepalive-interval,omitempty"`
+
+	// Combos defines named model groups that clients request as a single model.
+	// Each combo resolves to an ordered member list and falls back to the next
+	// member when upstream execution fails for the current one.
+	Combos []ComboConfig `yaml:"combos,omitempty" json:"combos,omitempty"`
 }
 
 // ClaudeCodeConfig configures Claude Code compatibility behavior.

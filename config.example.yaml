@@ -244,6 +244,25 @@ routing:
   # How long session-to-auth bindings are retained. Default: 1h
   session-affinity-ttl: "1h"
 
+# Named model combos expose one client-visible model backed by an ordered list
+# of real models. On eligible upstream failures, the next member is attempted.
+# strategy: fallback (default) or round-robin. Round-robin still falls back
+# through the remaining members when its selected starting model fails.
+# combos:
+#   - name: "coding-combo"
+#     display-name: "Coding Combo"
+#     strategy: "fallback"
+#     models:
+#       - "gpt-5.4"
+#       - "claude-sonnet-4-6"
+#       - "gemini-3.1-pro-preview"
+#   - name: "fast-combo"
+#     strategy: "round-robin"
+#     sticky-round-robin-limit: 3
+#     models:
+#       - "gpt-5.4-mini"
+#       - "gemini-3.1-flash-lite-preview"
+
 # Codex provider behavior.
 codex:
   # When true, and routing.strategy is fill-first or routing.session-affinity is true,

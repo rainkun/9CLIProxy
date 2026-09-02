@@ -270,6 +270,41 @@ type RoutingConfig struct {
 	SessionAffinityTTL string `yaml:"session-affinity-ttl,omitempty" json:"session-affinity-ttl,omitempty"`
 }
 
+// Combo strategy identifiers accepted by ComboConfig.Strategy.
+const (
+	// ComboStrategyFallback keeps the configured order and only moves to the
+	// next combo member after the current one fails.
+	ComboStrategyFallback = "fallback"
+	// ComboStrategyRoundRobin rotates the starting combo member per request.
+	ComboStrategyRoundRobin = "round-robin"
+)
+
+// ComboConfig defines a named group of models that clients can request as a
+// single model. A request resolves to the first usable member and falls back to
+// the remaining members in order when upstream execution fails.
+type ComboConfig struct {
+	// Name is the client-visible model identifier for the combo.
+	Name string `yaml:"name" json:"name"`
+
+	// Models lists member models in priority order. Entries use the same model
+	// identifiers as the model registry, so a provider prefix is required when
+	// the bare model name is ambiguous across channels.
+	Models []string `yaml:"models" json:"models"`
+
+	// Strategy selects "fallback" (default) or "round-robin".
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+
+	// StickyRoundRobinLimit is the number of consecutive requests served by the
+	// same member before round-robin advances. Values below 1 use 1.
+	StickyRoundRobinLimit int `yaml:"sticky-round-robin-limit,omitempty" json:"sticky-round-robin-limit,omitempty"`
+
+	// DisplayName is the optional human-readable name shown in model catalogs.
+	DisplayName string `yaml:"display-name,omitempty" json:"display-name,omitempty"`
+
+	// Disabled hides the combo from model listings and stops name resolution.
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
+}
+
 // OAuthModelAlias defines a model ID alias for a specific channel.
 // It maps the upstream model name (Name) to the client-visible alias (Alias).
 // When Fork is true, the alias is added as an additional model in listings while
