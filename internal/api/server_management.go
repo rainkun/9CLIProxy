@@ -64,6 +64,15 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PUT("/proxy-url", s.mgmt.PutProxyURL)
 		mgmt.PATCH("/proxy-url", s.mgmt.PutProxyURL)
 		mgmt.DELETE("/proxy-url", s.mgmt.DeleteProxyURL)
+		mgmt.POST("/proxy-url/test", s.mgmt.TestProxyURL)
+
+		mgmt.GET("/tunnel", s.mgmt.GetTunnel)
+		mgmt.PUT("/tunnel", s.mgmt.PutTunnel)
+		mgmt.GET("/tunnel/status", s.mgmt.GetTunnel)
+		mgmt.POST("/tunnel/start", s.mgmt.StartTunnel)
+		mgmt.POST("/tunnel/stop", s.mgmt.StopTunnel)
+		mgmt.POST("/tunnel/enable", s.mgmt.StartTunnel)
+		mgmt.POST("/tunnel/disable", s.mgmt.StopTunnel)
 
 		mgmt.POST("/api-call", s.mgmt.APICall)
 
@@ -168,6 +177,12 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/model-definitions/:channel", s.mgmt.GetStaticModelDefinitions)
 		mgmt.GET("/auth-files/download", s.mgmt.DownloadAuthFile)
 		mgmt.POST("/auth-files", s.mgmt.UploadAuthFile)
+		mgmt.POST("/auth-files/import-9router", s.mgmt.ImportNineRouterAuthFile)
+		mgmt.POST("/auth-files/import-chatgpt-session", s.mgmt.ImportChatGPTSession)
+		mgmt.POST("/auth-files/proxy", s.mgmt.ApplyProxyToAuthFiles)
+		mgmt.POST("/auth-files/apply-proxy", s.mgmt.ApplyProxyToAuthFiles)
+		mgmt.POST("/codex/quota", s.mgmt.CodexQuota)
+		mgmt.POST("/codex/bolt", s.mgmt.CodexBolt)
 		mgmt.DELETE("/auth-files", s.mgmt.DeleteAuthFile)
 		mgmt.PATCH("/auth-files/status", s.mgmt.PatchAuthFileStatus)
 		mgmt.PATCH("/auth-files/fields", s.mgmt.PatchAuthFileFields)

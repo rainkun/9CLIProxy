@@ -60,6 +60,8 @@ type Handler struct {
 	pluginStoreHTTPClient   pluginstore.HTTPDoer
 	pluginReleaseCacheMu    sync.Mutex
 	pluginReleaseCache      map[string]pluginReleaseCacheEntry
+	tunnelRuntime           *tunnelRuntime
+	tunnelReconcileMu       sync.Mutex
 }
 
 type configReloadSnapshot struct {
@@ -80,6 +82,7 @@ func NewHandler(cfg *config.Config, configFilePath string, manager *coreauth.Man
 		tokenStore:          sdkAuth.GetTokenStore(),
 		allowRemoteOverride: envSecret != "",
 		envSecret:           envSecret,
+		tunnelRuntime:       newTunnelRuntime(),
 	}
 	h.startAttemptCleanup()
 	return h
@@ -128,6 +131,10 @@ func (h *Handler) SetConfig(cfg *config.Config) {
 	h.mu.Lock()
 	h.cfg = cfg
 	h.mu.Unlock()
+	// A file watcher can replace the desired tunnel configuration while an
+	// existing cloudflared process is still running. Reconcile after publishing
+	// the new pointer so a disabled or retargeted tunnel is not left orphaned.
+	h.reconcileTunnelAfterConfigReload()
 }
 
 // SetAuthManager updates the auth manager reference used by management endpoints.
@@ -363,10 +370,6 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 		h.attemptsMu.Unlock()
 	}
 
-	if secretHash == "" && envSecret == "" {
-		return false, http.StatusForbidden, "remote management key not set"
-	}
-
 	if provided == "" {
 		fail()
 		return false, http.StatusUnauthorized, "missing management key"
@@ -379,6 +382,10 @@ func (h *Handler) AuthenticateManagementKey(clientIP string, localClient bool, p
 				return true, 0, ""
 			}
 		}
+	}
+
+	if secretHash == "" && envSecret == "" {
+		return false, http.StatusForbidden, "remote management key not set"
 	}
 
 	if envSecret != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(envSecret)) == 1 {

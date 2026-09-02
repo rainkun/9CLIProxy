@@ -265,6 +265,9 @@ func (h *Handler) writeAuthFile(ctx context.Context, name string, data []byte) e
 			dst = abs
 		}
 	}
+	if errMkdir := os.MkdirAll(filepath.Dir(dst), 0o700); errMkdir != nil {
+		return fmt.Errorf("failed to prepare auth directory: %w", errMkdir)
+	}
 	auth, err := h.buildAuthFromFileData(dst, data)
 	if err != nil {
 		return err

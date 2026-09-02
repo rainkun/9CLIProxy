@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "CLIProxyAPI Management",
+  "outputfilename": "cli-proxy-api-desktop",
+  "frontend:dir": "cmd/desktop",
+  "frontend:install": "",
+  "frontend:build": "",
+  "wailsjsdir": "./internal/desktop/wailsjs",
+  "author": {
+    "name": "router-for-me",
+    "email": ""
+  }
+}

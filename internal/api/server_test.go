@@ -451,41 +451,73 @@ func newTestServerWithOptions(t *testing.T, opts ...ServerOption) *Server {
 	return NewServer(cfg, authManager, accessManager, configPath, opts...)
 }
 
+func TestLocalManagementPasswordSurvivesConfigReload(t *testing.T) {
+	const localPassword = "desktop-test-password"
+	server := newTestServerWithOptions(t, WithLocalManagementPassword(localPassword))
+
+	if !server.managementRoutesEnabled.Load() {
+		t.Fatal("management routes should be enabled when a local management password is configured")
+	}
+
+	nextCfg := *server.cfg
+	nextCfg.RemoteManagement.SecretKey = ""
+	server.UpdateClients(&nextCfg)
+
+	if !server.managementRoutesEnabled.Load() {
+		t.Fatal("config reload disabled management routes despite the active local management password")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v0/management/config", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.Header.Set("Authorization", "Bearer "+localPassword)
+	rr := httptest.NewRecorder()
+	server.engine.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+}
+
 func TestHealthz(t *testing.T) {
 	server := newTestServer(t)
 
-	t.Run("GET", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-		rr := httptest.NewRecorder()
-		server.engine.ServeHTTP(rr, req)
+	for _, path := range []string{"/healthz", "/api/health"} {
+		t.Run("GET "+path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rr := httptest.NewRecorder()
+			server.engine.ServeHTTP(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Fatalf("unexpected status code: got %d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
-		}
+			if rr.Code != http.StatusOK {
+				t.Fatalf("unexpected status code: got %d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+			}
 
-		var resp struct {
-			Status string `json:"status"`
-		}
-		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("failed to parse response JSON: %v; body=%s", err, rr.Body.String())
-		}
-		if resp.Status != "ok" {
-			t.Fatalf("unexpected response status: got %q want %q", resp.Status, "ok")
-		}
-	})
+			var resp struct {
+				OK     bool   `json:"ok"`
+				Status string `json:"status"`
+			}
+			if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("failed to parse response JSON: %v; body=%s", err, rr.Body.String())
+			}
+			if resp.Status != "ok" {
+				t.Fatalf("unexpected response status: got %q want %q", resp.Status, "ok")
+			}
+			if !resp.OK {
+				t.Fatal("expected health response to include ok=true")
+			}
+		})
 
-	t.Run("HEAD", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodHead, "/healthz", nil)
-		rr := httptest.NewRecorder()
-		server.engine.ServeHTTP(rr, req)
+		t.Run("HEAD "+path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodHead, path, nil)
+			rr := httptest.NewRecorder()
+			server.engine.ServeHTTP(rr, req)
 
-		if rr.Code != http.StatusOK {
-			t.Fatalf("unexpected status code: got %d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
-		}
-		if rr.Body.Len() != 0 {
-			t.Fatalf("expected empty body for HEAD request, got %q", rr.Body.String())
-		}
-	})
+			if rr.Code != http.StatusOK {
+				t.Fatalf("unexpected status code: got %d want %d; body=%s", rr.Code, http.StatusOK, rr.Body.String())
+			}
+			if rr.Body.Len() != 0 {
+				t.Fatalf("expected empty body for HEAD request, got %q", rr.Body.String())
+			}
+		})
+	}
 }
 
 func TestCodexLiveRoutesRequireAuthAndAreRegistered(t *testing.T) {

@@ -190,6 +190,29 @@ type TLSConfig struct {
 	Key string `yaml:"key" json:"key"`
 }
 
+// TunnelConfig configures an optional Cloudflare Quick Tunnel for the local
+// proxy listener. A relay can provide a stable public URL while the underlying
+// Quick Tunnel URL changes after reconnects.
+type TunnelConfig struct {
+	// Provider identifies the tunnel implementation. Currently "cloudflare" is
+	// supported for Cloudflare Quick Tunnels.
+	Provider string `yaml:"provider" json:"provider"`
+	// Enabled records the desired state saved by Management. When true, the
+	// service resumes the tunnel after its local HTTP listener is ready.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// TargetURL is the local HTTP(S) listener forwarded by cloudflared.
+	TargetURL string `yaml:"target-url" json:"target-url"`
+	// CloudflaredPath optionally points to a local cloudflared executable.
+	CloudflaredPath string `yaml:"cloudflared-path,omitempty" json:"cloudflared-path,omitempty"`
+	// RelayURL is the relay endpoint that maps a stable subdomain to the current
+	// Cloudflare Quick Tunnel URL. Leave empty to use the 9router-compatible
+	// default; use "direct" to expose only the temporary Quick Tunnel URL.
+	RelayURL string `yaml:"relay-url,omitempty" json:"relay-url,omitempty"`
+	// ShortID optionally pins the stable relay identifier. When omitted, the
+	// Management API generates and persists one next to its runtime files.
+	ShortID string `yaml:"short-id,omitempty" json:"short-id,omitempty"`
+}
+
 // PprofConfig holds pprof HTTP server settings.
 type PprofConfig struct {
 	// Enable toggles the pprof HTTP debug server.

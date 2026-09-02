@@ -358,6 +358,16 @@ func (s *Server) Start() error {
 	}
 }
 
+// StartConfiguredTunnel resumes the configured public tunnel after the HTTP
+// listener has been started. It is intentionally a no-op when the tunnel is
+// disabled or management handlers are unavailable.
+func (s *Server) StartConfiguredTunnel(ctx context.Context) {
+	if s == nil || s.mgmt == nil {
+		return
+	}
+	s.mgmt.StartTunnelIfEnabled(ctx)
+}
+
 // Stop gracefully shuts down the API server without interrupting any
 // active connections.
 //
@@ -368,6 +378,10 @@ func (s *Server) Start() error {
 //   - error: An error if the server fails to stop
 func (s *Server) Stop(ctx context.Context) error {
 	log.Debug("Stopping API server...")
+
+	if s.mgmt != nil {
+		s.mgmt.StopTunnelRuntime()
+	}
 
 	if s.keepAliveEnabled {
 		select {

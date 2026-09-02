@@ -132,6 +132,50 @@ func TestFileSynthesizer_Synthesize_ValidAuthFile(t *testing.T) {
 	}
 }
 
+func TestFileSynthesizer_Synthesize_MapsCompatibilityMetadataAttributes(t *testing.T) {
+	tempDir := t.TempDir()
+	authData := map[string]any{
+		"type":         "openai-compatible-test",
+		"api_key":      "compat-key",
+		"base_url":     "https://compat.example.test/v1",
+		"prefix":       "compat",
+		"compat_name":  "compat",
+		"provider_key": "openai-compatible-test",
+		"provider_specific_data": map[string]any{
+			"baseUrl": "https://compat.example.test/v1",
+		},
+	}
+	data, errMarshal := json.Marshal(authData)
+	if errMarshal != nil {
+		t.Fatalf("marshal auth: %v", errMarshal)
+	}
+	if errWrite := os.WriteFile(filepath.Join(tempDir, "compat.json"), data, 0644); errWrite != nil {
+		t.Fatalf("write auth: %v", errWrite)
+	}
+
+	auths, errSynthesize := NewFileSynthesizer().Synthesize(&SynthesisContext{
+		Config:  &config.Config{},
+		AuthDir: tempDir,
+		Now:     time.Now(),
+	})
+	if errSynthesize != nil {
+		t.Fatalf("Synthesize() error = %v", errSynthesize)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("auth count = %d, want 1", len(auths))
+	}
+	for key, want := range map[string]string{
+		"api_key":      "compat-key",
+		"base_url":     "https://compat.example.test/v1",
+		"compat_name":  "compat",
+		"provider_key": "openai-compatible-test",
+	} {
+		if got := auths[0].Attributes[key]; got != want {
+			t.Fatalf("Attributes[%q] = %q, want %q", key, got, want)
+		}
+	}
+}
+
 func TestFileSynthesizer_Synthesize_LegacyKimiFingerprintProfile(t *testing.T) {
 	tempDir := t.TempDir()
 	authData := map[string]any{

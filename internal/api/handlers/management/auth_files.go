@@ -18,6 +18,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/credentialweight"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/proxyutil"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
@@ -248,6 +249,20 @@ func (h *Handler) listAuthFilesFromDisk(c *gin.Context) {
 				emailValue := gjson.GetBytes(data, "email").String()
 				fileData["type"] = typeValue
 				fileData["email"] = emailValue
+				// Proxy credentials must never be returned by the management API.
+				// Keep a redacted value so the UI can show which override is
+				// active without exposing passwords or URL paths.
+				proxyValue := strings.TrimSpace(gjson.GetBytes(data, "proxy_url").String())
+				if proxyValue == "" {
+					proxyValue = strings.TrimSpace(gjson.GetBytes(data, "proxyUrl").String())
+				}
+				if proxyValue != "" {
+					if _, errProxy := proxyutil.Parse(proxyValue); errProxy == nil {
+						redacted := redactProxySetting(proxyValue)
+						fileData["proxy_url"] = redacted
+						fileData["proxyUrl"] = redacted
+					}
+				}
 				if projectID := strings.TrimSpace(gjson.GetBytes(data, "project_id").String()); projectID != "" {
 					fileData["project_id"] = projectID
 				}
@@ -353,6 +368,27 @@ func (h *Handler) buildAuthFileEntryLocked(auth *coreauth.Auth) gin.H {
 	}
 	if projectID := authProjectID(auth); projectID != "" {
 		entry["project_id"] = projectID
+	}
+	// ProxyURL is persisted on the auth record, while uploads and a few plugin
+	// paths may retain it only in Metadata. Expose both API spellings with
+	// credentials and path components redacted.
+	proxyValue := strings.TrimSpace(auth.ProxyURL)
+	if proxyValue == "" && auth.Metadata != nil {
+		for _, key := range []string{"proxy_url", "proxyUrl"} {
+			if raw, ok := auth.Metadata[key].(string); ok {
+				if trimmed := strings.TrimSpace(raw); trimmed != "" {
+					proxyValue = trimmed
+					break
+				}
+			}
+		}
+	}
+	if proxyValue != "" {
+		if _, errProxy := proxyutil.Parse(proxyValue); errProxy == nil {
+			redacted := redactProxySetting(proxyValue)
+			entry["proxy_url"] = redacted
+			entry["proxyUrl"] = redacted
+		}
 	}
 	if accountType, account := auth.AccountInfo(); accountType != "" || account != "" {
 		if accountType != "" {

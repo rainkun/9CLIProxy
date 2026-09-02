@@ -40,6 +40,22 @@ func TestAuthenticateManagementKey_LocalhostIPBan_BlocksCorrectKeyDuringBan(t *t
 	}
 }
 
+func TestAuthenticateManagementKey_AllowsLocalPasswordWithoutConfiguredSecret(t *testing.T) {
+	h := &Handler{
+		cfg:            &config.Config{},
+		failedAttempts: make(map[string]*attemptInfo),
+		localPassword:  "desktop-secret",
+	}
+
+	allowed, statusCode, errMsg := h.AuthenticateManagementKey("127.0.0.1", true, "desktop-secret")
+	if !allowed {
+		t.Fatalf("expected local password to be accepted, got status=%d msg=%q", statusCode, errMsg)
+	}
+	if statusCode != 0 || errMsg != "" {
+		t.Fatalf("unexpected local auth result: status=%d msg=%q", statusCode, errMsg)
+	}
+}
+
 func TestMiddlewareSetsSupportPluginHeader(t *testing.T) {
 
 	h := &Handler{

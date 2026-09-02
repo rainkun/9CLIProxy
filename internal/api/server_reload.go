@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/access"
@@ -125,10 +126,20 @@ func (s *Server) UpdateClientsContext(ctx context.Context, cfg *config.Config) b
 		prevSecretEmpty = oldCfg.RemoteManagement.SecretKey == ""
 	}
 	newSecretEmpty := cfg.RemoteManagement.SecretKey == ""
-	if s.envManagementSecret {
+	// Desktop/TUI mode supplies an ephemeral local management password that is
+	// intentionally not persisted in the YAML config. Keep the management
+	// routes enabled across watcher-driven config reloads while that password
+	// is still active; otherwise the first reload turns the desktop UI into a
+	// non-working login screen (all /v0/management/* requests become 404).
+	hasLocalManagementSecret := strings.TrimSpace(s.localPassword) != ""
+	if s.envManagementSecret || hasLocalManagementSecret {
 		s.registerManagementRoutes()
 		if s.managementRoutesEnabled.CompareAndSwap(false, true) {
-			log.Info("management routes enabled via MANAGEMENT_PASSWORD")
+			if s.envManagementSecret {
+				log.Info("management routes enabled via MANAGEMENT_PASSWORD")
+			} else {
+				log.Info("management routes kept enabled for local desktop management password")
+			}
 		} else {
 			s.managementRoutesEnabled.Store(true)
 		}

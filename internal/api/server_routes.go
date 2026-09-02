@@ -46,10 +46,15 @@ func (s *Server) setupRoutes() {
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "ok"})
 	}
 	s.engine.GET("/healthz", healthzHandler)
 	s.engine.HEAD("/healthz", healthzHandler)
+	// 9router's relay health probe targets /api/health. Keep this lightweight
+	// alias alongside /healthz so a stable public tunnel can be validated
+	// without requiring API-key authentication.
+	s.engine.GET("/api/health", healthzHandler)
+	s.engine.HEAD("/api/health", healthzHandler)
 
 	s.engine.GET("/management.html", s.serveManagementControlPanel)
 	openaiHandlers := openai.NewOpenAIAPIHandler(s.handlers)

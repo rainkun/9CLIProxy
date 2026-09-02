@@ -11,6 +11,20 @@ tls:
   cert: ""
   key: ""
 
+# Optional public Cloudflare Quick Tunnel. This is opt-in. The first Enable
+# action downloads the matching cloudflared binary automatically into the
+# local runtime directory; set cloudflared-path only when using your own copy.
+# By default, the 9router-compatible relay keeps the public hostname stable
+# while the underlying trycloudflare.com URL is rotated by cloudflared.
+tunnel:
+  provider: "cloudflare"
+  enabled: false
+  target-url: "http://127.0.0.1:8317"
+  # relay-url: "https://abc-tunnel.us"
+  # short-id: "w2dy6w"
+  # Set relay-url to "direct" to use only the temporary Quick Tunnel URL.
+  # cloudflared-path: ""
+
 # Management API settings
 remote-management:
   # Whether to allow remote (non-localhost) management access.
@@ -27,7 +41,7 @@ remote-management:
 
   # Disable automatic periodic background updates of the management panel from GitHub (default: false).
   # When enabled, the panel is only downloaded on first access if missing, and never auto-updated afterward.
-  # disable-auto-update-panel: false
+  disable-auto-update-panel: true
 
   # GitHub repository for the management control panel. Accepts a repository URL or releases API URL.
   panel-github-repository: "https://github.com/router-for-me/Cli-Proxy-API-Management-Center"

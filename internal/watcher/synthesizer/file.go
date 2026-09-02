@@ -199,6 +199,13 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
+	for _, key := range []string{"api_key", "base_url", "compat_name", "provider_key"} {
+		if value, ok := metadata[key].(string); ok {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				a.Attributes[key] = trimmed
+			}
+		}
+	}
 	// Read priority from auth file.
 	if rawPriority, ok := metadata["priority"]; ok {
 		switch v := rawPriority.(type) {

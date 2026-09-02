@@ -16,6 +16,9 @@ type Config struct {
 	// TLS config controls HTTPS server settings.
 	TLS TLSConfig `yaml:"tls" json:"tls"`
 
+	// Tunnel configures the optional public tunnel for this local listener.
+	Tunnel TunnelConfig `yaml:"tunnel" json:"tunnel"`
+
 	// Home config is runtime-only and is populated from -home-jwt.
 	Home HomeConfig `yaml:"-" json:"-"`
 
