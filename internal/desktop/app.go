@@ -192,7 +192,6 @@ func (a *App) prepare() error {
 		serverOptions = append(serverOptions, api.WithExampleAPIKeySafeMode())
 	}
 
-	managementasset.StartAutoUpdater(context.Background(), configFilePath)
 	misc.StartAntigravityVersionUpdater(context.Background())
 	startModelCatalogUpdaters(a.localModel, cfg.Home.Enabled)
 
@@ -317,8 +316,13 @@ func (a *App) assetHandler() http.Handler {
 			_, _ = w.Write([]byte(errorPage(a.startupErrorMsg)))
 			return
 		}
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-			r.URL.Path = "/management.html"
+		if isEmbeddedManagementRoute(r.URL.Path) {
+			body := injectDesktopSession(embeddedManagementHTML, a.localPassword)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(body)
+			return
 		}
 		proxy := newDesktopReverseProxy(a.serverURL)
 		proxy.ModifyResponse = func(resp *http.Response) error {
@@ -342,6 +346,16 @@ func (a *App) assetHandler() http.Handler {
 		}
 		proxy.ServeHTTP(w, r)
 	})
+}
+
+func isEmbeddedManagementRoute(path string) bool {
+	switch strings.TrimSpace(path) {
+	case "", "/", "/index.html", "/management.html", "/dashboard", "/combos",
+		"/ai-providers", "/auth-files", "/oauth", "/quota", "/config", "/logs", "/system":
+		return true
+	default:
+		return false
+	}
 }
 
 func newDesktopReverseProxy(target *url.URL) *httputil.ReverseProxy {

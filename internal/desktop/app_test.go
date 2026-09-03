@@ -69,3 +69,24 @@ func TestAssetHandlerProxiesSameOriginManagementRequest(t *testing.T) {
 		t.Fatalf("proxy body = %q, want upstream response", response.Body.String())
 	}
 }
+
+func TestAssetHandlerServesEmbeddedManagementUI(t *testing.T) {
+	app := &App{localPassword: "desktop-secret"}
+	request := httptest.NewRequest(http.MethodGet, "http://wails.localhost/combos", nil)
+	response := httptest.NewRecorder()
+
+	app.assetHandler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("embedded UI status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("embedded UI content type = %q, want HTML", got)
+	}
+	if !strings.Contains(response.Body.String(), "Model Combos") {
+		t.Fatal("embedded UI does not contain the Model Combos navigation entry")
+	}
+	if !strings.Contains(response.Body.String(), "desktop-secret") {
+		t.Fatal("desktop session bootstrap was not injected into embedded UI")
+	}
+}
