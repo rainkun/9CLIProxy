@@ -277,22 +277,34 @@ const (
 	ComboStrategyFallback = "fallback"
 	// ComboStrategyRoundRobin rotates the starting combo member per request.
 	ComboStrategyRoundRobin = "round-robin"
+	// ComboStrategyFusion gathers panel answers in parallel, then asks a judge.
+	ComboStrategyFusion = "fusion"
 )
 
 // ComboConfig defines a named group of models that clients can request as a
-// single model. A request resolves to the first usable member and falls back to
-// the remaining members in order when upstream execution fails.
+// single model. The strategy either selects a member with failover or gathers
+// panel answers for judge synthesis.
 type ComboConfig struct {
 	// Name is the client-visible model identifier for the combo.
 	Name string `yaml:"name" json:"name"`
 
 	// Models lists member models in priority order. Entries use the same model
-	// identifiers as the model registry, so a provider prefix is required when
-	// the bare model name is ambiguous across channels.
+	// identifiers as the model registry. "provider::model" pins a provider;
+	// bare IDs preserve legacy registry routing and user-defined model prefixes.
 	Models []string `yaml:"models" json:"models"`
 
-	// Strategy selects "fallback" (default) or "round-robin".
+	// Strategy selects "fallback" (default), "round-robin", or "fusion".
 	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+
+	// JudgeModel is the concrete model that synthesizes Fusion panel answers.
+	JudgeModel string `yaml:"judge-model,omitempty" json:"judge-model,omitempty"`
+
+	// JudgePrompt optionally customizes synthesis instructions.
+	JudgePrompt string `yaml:"judge-prompt,omitempty" json:"judge-prompt,omitempty"`
+
+	// MinSuccessfulModels is the minimum number of usable Fusion answers.
+	// Zero uses one. Failed members are omitted, never presented as answers.
+	MinSuccessfulModels int `yaml:"min-successful-models,omitempty" json:"min-successful-models,omitempty"`
 
 	// StickyRoundRobinLimit is the number of consecutive requests served by the
 	// same member before round-robin advances. Values below 1 use 1.

@@ -182,6 +182,9 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 
 	// Normalize named model combos.
 	cfg.SanitizeCombos()
+	if errCombos := ValidateCombos(cfg.Combos); errCombos != nil {
+		return nil, errCombos
+	}
 
 	// Normalize global OAuth request-scoped error rules.
 	cfg.SanitizeOAuthRequestScopedErrors()

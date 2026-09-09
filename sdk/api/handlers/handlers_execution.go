@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/clienterror"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
@@ -42,9 +43,19 @@ func (h *BaseAPIHandler) executeWithAuthManager(ctx context.Context, handlerType
 
 func (h *BaseAPIHandler) executeWithAuthManagerFormats(ctx context.Context, entryProtocol, exitProtocol, modelName string, rawJSON []byte, alt string, allowImageModel bool, execOptions modelExecutionOptions) ([]byte, http.Header, *interfaces.ErrorMessage) {
 	if combo, ok := h.comboForModel(modelName); ok && !comboExecutionActive(ctx) {
+		if errCombo := h.validateComboExecution(ctx, combo); errCombo != nil {
+			return nil, nil, errCombo
+		}
+		if combo.Strategy == config.ComboStrategyFusion {
+			return h.executeFusion(ctx, entryProtocol, exitProtocol, combo, rawJSON, alt, allowImageModel, execOptions)
+		}
 		var lastErr *interfaces.ErrorMessage
 		for _, member := range comboMemberOrder(combo) {
-			body, headers, errMsg := h.executeWithAuthManagerFormats(comboExecutionContext(ctx), entryProtocol, exitProtocol, member, rewriteComboRequestModel(rawJSON, member), alt, allowImageModel, execOptions)
+			if errCancelled := comboContextError(ctx); errCancelled != nil {
+				return nil, nil, errCancelled
+			}
+			model, memberOptions := comboMemberExecution(member, execOptions)
+			body, headers, errMsg := h.executeWithAuthManagerFormats(comboExecutionContext(ctx), entryProtocol, exitProtocol, model, rewriteComboRequestModel(rawJSON, model), alt, allowImageModel, memberOptions)
 			if errMsg == nil {
 				return rewriteComboResponseModel(body, combo.Name), headers, nil
 			}
@@ -128,9 +139,17 @@ func (h *BaseAPIHandler) ExecuteCountWithAuthManager(ctx context.Context, handle
 
 func (h *BaseAPIHandler) executeCountWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string, execOptions modelExecutionOptions) ([]byte, http.Header, *interfaces.ErrorMessage) {
 	if combo, ok := h.comboForModel(modelName); ok && !comboExecutionActive(ctx) {
+		if errCombo := h.validateComboExecution(ctx, combo); errCombo != nil {
+			return nil, nil, errCombo
+		}
+		// Counting never runs panel/judge generation or advances round-robin.
 		var lastErr *interfaces.ErrorMessage
-		for _, member := range comboMemberOrder(combo) {
-			body, headers, errMsg := h.executeCountWithAuthManager(comboExecutionContext(ctx), handlerType, member, rewriteComboRequestModel(rawJSON, member), alt, execOptions)
+		for _, member := range combo.Models {
+			if errCancelled := comboContextError(ctx); errCancelled != nil {
+				return nil, nil, errCancelled
+			}
+			model, memberOptions := comboMemberExecution(member, execOptions)
+			body, headers, errMsg := h.executeCountWithAuthManager(comboExecutionContext(ctx), handlerType, model, rewriteComboRequestModel(rawJSON, model), alt, memberOptions)
 			if errMsg == nil {
 				return rewriteComboResponseModel(body, combo.Name), headers, nil
 			}

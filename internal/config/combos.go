@@ -1,6 +1,12 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// MaxFusionModels bounds per-request fan-out and synthesis context size.
+const MaxFusionModels = 16
 
 // SanitizeCombos trims combo definitions, removes duplicates, and applies
 // conservative defaults so malformed entries cannot shadow real model names.
@@ -39,9 +45,11 @@ func (cfg *Config) SanitizeCombos() {
 		}
 		combo.Models = models
 		combo.Strategy = strings.ToLower(strings.TrimSpace(combo.Strategy))
-		if combo.Strategy != ComboStrategyRoundRobin {
+		if combo.Strategy == "" {
 			combo.Strategy = ComboStrategyFallback
 		}
+		combo.JudgeModel = strings.TrimSpace(combo.JudgeModel)
+		combo.JudgePrompt = strings.TrimSpace(combo.JudgePrompt)
 		if combo.StickyRoundRobinLimit < 1 {
 			combo.StickyRoundRobinLimit = 1
 		}
@@ -49,4 +57,43 @@ func (cfg *Config) SanitizeCombos() {
 		out = append(out, combo)
 	}
 	cfg.Combos = out
+}
+
+// ValidateCombos rejects unsupported strategies and nested combos before execution.
+// Nested groups would hide additional fan-out and make the N+1 cost misleading.
+func ValidateCombos(combos []ComboConfig) error {
+	names := make(map[string]bool, len(combos))
+	for _, combo := range combos {
+		key := strings.ToLower(strings.TrimSpace(combo.Name))
+		if key == "" || names[key] {
+			return fmt.Errorf("combo names must be non-empty and unique: %q", combo.Name)
+		}
+		names[key] = true
+	}
+	for _, combo := range combos {
+		if len(combo.Models) == 0 {
+			return fmt.Errorf("combo %q requires at least one model", combo.Name)
+		}
+		for _, model := range combo.Models {
+			if strings.TrimSpace(model) == "" || names[strings.ToLower(strings.TrimSpace(model))] {
+				return fmt.Errorf("combo %q requires concrete member models, not empty or nested combo names", combo.Name)
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(combo.Strategy)) {
+		case "", ComboStrategyFallback, ComboStrategyRoundRobin:
+		case ComboStrategyFusion:
+			if combo.JudgeModel == "" || names[strings.ToLower(combo.JudgeModel)] {
+				return fmt.Errorf("fusion combo %q requires a concrete judge-model", combo.Name)
+			}
+			if len(combo.Models) > MaxFusionModels {
+				return fmt.Errorf("fusion combo %q exceeds the limit of %d panel models", combo.Name, MaxFusionModels)
+			}
+			if combo.MinSuccessfulModels < 0 || combo.MinSuccessfulModels > len(combo.Models) {
+				return fmt.Errorf("fusion combo %q has invalid min-successful-models", combo.Name)
+			}
+		default:
+			return fmt.Errorf("combo %q has unsupported strategy %q", combo.Name, combo.Strategy)
+		}
+	}
+	return nil
 }

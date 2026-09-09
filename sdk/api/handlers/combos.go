@@ -3,6 +3,8 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -22,8 +24,9 @@ type comboRotation struct {
 }
 
 type comboRotationState struct {
-	index int
-	used  int
+	index   int
+	used    int
+	members string
 }
 
 var globalComboRotation = comboRotation{state: make(map[string]comboRotationState)}
@@ -71,6 +74,10 @@ func comboMemberOrder(combo config.ComboConfig) []string {
 	key := strings.ToLower(strings.TrimSpace(combo.Name))
 	globalComboRotation.mu.Lock()
 	state := globalComboRotation.state[key]
+	fingerprint := strings.Join(models, "\x00")
+	if state.members != fingerprint {
+		state = comboRotationState{members: fingerprint}
+	}
 	index := state.index % len(models)
 	limit := combo.StickyRoundRobinLimit
 	if limit < 1 {
@@ -88,6 +95,9 @@ func comboMemberOrder(combo config.ComboConfig) []string {
 
 func comboFallbackEligible(errMsg *interfaces.ErrorMessage) bool {
 	if errMsg == nil {
+		return false
+	}
+	if errors.Is(errMsg.Error, context.Canceled) || errors.Is(errMsg.Error, context.DeadlineExceeded) {
 		return false
 	}
 	if errMsg.StatusCode == http.StatusBadRequest && errMsg.Error != nil {
@@ -132,6 +142,9 @@ func rewriteComboStreamChunk(raw []byte, model string) []byte {
 	if len(raw) == 0 {
 		return raw
 	}
+	if json.Valid(bytes.TrimSpace(raw)) {
+		return rewriteComboResponseModel(raw, model)
+	}
 	lines := bytes.Split(raw, []byte("\n"))
 	for i, line := range lines {
 		trimmed := bytes.TrimSpace(line)
@@ -147,10 +160,20 @@ func rewriteComboStreamChunk(raw []byte, model string) []byte {
 }
 
 func (h *BaseAPIHandler) executeComboStream(ctx context.Context, entryProtocol, exitProtocol string, combo config.ComboConfig, rawJSON []byte, alt string, allowImageModel bool, execOptions modelExecutionOptions) (<-chan []byte, http.Header, <-chan *interfaces.ErrorMessage) {
+	if errCombo := h.validateComboExecution(ctx, combo); errCombo != nil {
+		return comboErrorStream(errCombo)
+	}
+	if combo.Strategy == config.ComboStrategyFusion {
+		return h.executeFusionStream(ctx, entryProtocol, exitProtocol, combo, rawJSON, alt, allowImageModel, execOptions)
+	}
 	var lastErr *interfaces.ErrorMessage
 	for _, member := range comboMemberOrder(combo) {
+		if errCancelled := comboContextError(ctx); errCancelled != nil {
+			return comboErrorStream(errCancelled)
+		}
 		attemptCtx, cancel := context.WithCancel(comboExecutionContext(ctx))
-		data, headers, errs := h.executeStreamWithAuthManagerFormats(attemptCtx, entryProtocol, exitProtocol, member, rewriteComboRequestModel(rawJSON, member), alt, allowImageModel, execOptions)
+		model, memberOptions := comboMemberExecution(member, execOptions)
+		data, headers, errs := h.executeStreamWithAuthManagerFormats(attemptCtx, entryProtocol, exitProtocol, model, rewriteComboRequestModel(rawJSON, model), alt, allowImageModel, memberOptions)
 		first, firstErr, dataOpen, errOpen := readComboStreamStart(attemptCtx, data, errs)
 		if firstErr != nil {
 			cancel()
@@ -179,6 +202,9 @@ func readComboStreamStart(ctx context.Context, data <-chan []byte, errs <-chan *
 				data = nil
 				continue
 			}
+			if len(bytes.TrimSpace(chunk)) == 0 {
+				continue
+			}
 			first = chunk
 			return first, nil, true, errs != nil
 		case errMsg, ok := <-errs:
@@ -191,7 +217,7 @@ func readComboStreamStart(ctx context.Context, data <-chan []byte, errs <-chan *
 			}
 		}
 	}
-	return first, nil, false, false
+	return first, &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("combo member returned an empty stream")}, false, false
 }
 
 func forwardComboStream(ctx context.Context, cancel context.CancelFunc, data <-chan []byte, errs <-chan *interfaces.ErrorMessage, first []byte, dataOpen, errOpen bool, comboName string, headers http.Header) (<-chan []byte, http.Header, <-chan *interfaces.ErrorMessage) {
@@ -225,6 +251,7 @@ func forwardComboStream(ctx context.Context, cancel context.CancelFunc, data <-c
 			case payload, ok := <-data:
 				if !ok {
 					dataOpen = false
+					data = nil
 					continue
 				}
 				if !sendData(payload) {
@@ -233,6 +260,7 @@ func forwardComboStream(ctx context.Context, cancel context.CancelFunc, data <-c
 			case errMsg, ok := <-errs:
 				if !ok {
 					errOpen = false
+					errs = nil
 					continue
 				}
 				if errMsg != nil {
@@ -246,6 +274,34 @@ func forwardComboStream(ctx context.Context, cancel context.CancelFunc, data <-c
 		}
 	}()
 	return outData, headers, outErr
+}
+
+func comboContextError(ctx context.Context) *interfaces.ErrorMessage {
+	if ctx != nil && ctx.Err() != nil {
+		return &interfaces.ErrorMessage{StatusCode: http.StatusRequestTimeout, Error: ctx.Err()}
+	}
+	return nil
+}
+
+// Explicit selections use provider::model. Bare IDs preserve legacy registry
+// routing, including user-defined prefixes and model names containing slashes.
+func comboMemberExecution(member string, options modelExecutionOptions) (string, modelExecutionOptions) {
+	if provider, model, ok := strings.Cut(member, "::"); ok && provider != "" && model != "" {
+		options.ForcedProvider = strings.ToLower(strings.TrimSpace(provider))
+		options.AuthSelectionModel = strings.TrimSpace(model)
+		return strings.TrimSpace(model), options
+	}
+	return member, options
+}
+
+func (h *BaseAPIHandler) validateComboExecution(ctx context.Context, combo config.ComboConfig) *interfaces.ErrorMessage {
+	if errCancelled := comboContextError(ctx); errCancelled != nil {
+		return errCancelled
+	}
+	if errValidate := config.ValidateCombos(h.Cfg.Combos); errValidate != nil {
+		return &interfaces.ErrorMessage{StatusCode: http.StatusBadRequest, Error: errValidate}
+	}
+	return nil
 }
 
 func comboErrorStream(errMsg *interfaces.ErrorMessage) (<-chan []byte, http.Header, <-chan *interfaces.ErrorMessage) {

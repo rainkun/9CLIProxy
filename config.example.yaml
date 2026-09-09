@@ -246,7 +246,7 @@ routing:
 
 # Named model combos expose one client-visible model backed by an ordered list
 # of real models. On eligible upstream failures, the next member is attempted.
-# strategy: fallback (default) or round-robin. Round-robin still falls back
+# strategy: fallback (default), round-robin, or fusion. Round-robin still falls back
 # through the remaining members when its selected starting model fails.
 # combos:
 #   - name: "coding-combo"
@@ -262,6 +262,18 @@ routing:
 #     models:
 #       - "gpt-5.4-mini"
 #       - "gemini-3.1-flash-lite-preview"
+#   - name: "quality-combo"
+#     strategy: "fusion"
+#     models:
+#       - "codex::gpt-5.4"
+#       - "claude::claude-sonnet-4-6"
+#     judge-model: "codex::gpt-5.4"
+#     min-successful-models: 1
+#     judge-prompt: "Prioritize correctness and clearly state uncertainty."
+# Fusion calls all panel models in parallel, then one judge (N+1 logical calls).
+# Provider retries can add calls. Up to 16 concrete panel models; nested combos
+# are rejected. The judge is skipped if too few panel models return usable text.
+# Use provider::model to pin a provider, or a bare model ID for registry routing.
 
 # Codex provider behavior.
 codex:

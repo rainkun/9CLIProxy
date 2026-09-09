@@ -8,6 +8,8 @@ config.yaml
 
 # Generated content
 bin/*
+/artifacts/
+/buildtmp/
 /logs
 conv/*
 temp/*
@@ -22,6 +24,7 @@ objectstore/*
 
 # Static assets
 static/*
+!static/management.html
 
 # Authentication data
 auths/*

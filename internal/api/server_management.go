@@ -133,6 +133,7 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PATCH("/routing/strategy", s.mgmt.PutRoutingStrategy)
 
 		mgmt.GET("/combos", s.mgmt.GetCombos)
+		mgmt.GET("/combos/models", s.mgmt.GetComboModels)
 		mgmt.PUT("/combos", s.mgmt.PutCombos)
 		mgmt.PATCH("/combos", s.mgmt.PatchCombo)
 		mgmt.DELETE("/combos", s.mgmt.DeleteCombo)
